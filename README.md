@@ -21,6 +21,10 @@ that happens:
   escape for a character that didn't need escaping.
 - Copy-pasted lines produce exact duplicates that are harmless but signal
   the file is out of sync with whatever generated it.
+- A `!` pattern that tries to re-include a file inside a directory that's
+  already excluded further up the file never fires: matchers don't look
+  inside a directory they've already decided to skip, so the negation is
+  dead text.
 
 `globlint` catches these mechanically instead of relying on someone
 noticing during review.
@@ -58,6 +62,7 @@ for finding in lint_file("patterns.txt"):
 | ---- | ------- |
 | E001 | `!` with nothing after it |
 | E002 | unmatched `[` (character class never closes) |
+| E003 | `!` pattern nested under an earlier directory exclude, can never re-include anything |
 | W001 | unescaped trailing whitespace |
 | W002 | backslash used as a path separator instead of `/` |
 | W003 | redundant leading `./` |

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 _ESCAPABLE = {" ", "#", "!", "\\"}
+_GLOB_META = {"*", "?", "["}
 
 
 @dataclass(frozen=True)
@@ -64,9 +65,18 @@ def _has_unmatched_bracket(pattern: str) -> bool:
     return False
 
 
+def _is_plain_dir_pattern(pattern: str) -> bool:
+    # A directory pattern we can reason about literally: no wildcards, no
+    # escapes, just a path ending in '/'. Anything with glob syntax in it
+    # might match a narrower or wider set of directories than the text
+    # suggests, so we leave those out rather than guess.
+    return pattern.endswith("/") and not any(c in _GLOB_META for c in pattern) and "\\" not in pattern
+
+
 def lint_lines(lines: list[str]) -> list[Finding]:
     findings: list[Finding] = []
     seen: dict[str, int] = {}
+    dir_excludes: list[tuple[str, int]] = []
 
     for lineno, raw in enumerate(lines, start=1):
         line = raw.rstrip("\n")
@@ -98,6 +108,22 @@ def lint_lines(lines: list[str]) -> list[Finding]:
 
         if "//" in pattern:
             findings.append(Finding(lineno, "W004", "repeated '/' has no effect, collapse it"))
+
+        if negated:
+            for dir_path, dir_line in reversed(dir_excludes):
+                if pattern != dir_path and pattern.startswith(dir_path):
+                    findings.append(
+                        Finding(
+                            lineno,
+                            "E003",
+                            "can never re-include: nested under directory excluded on "
+                            f"line {dir_line}, and matchers don't descend into excluded "
+                            "directories to test negations",
+                        )
+                    )
+                    break
+        elif _is_plain_dir_pattern(pattern):
+            dir_excludes.append((pattern, lineno))
 
         dedupe_key = f"{'!' if negated else ''}{pattern}"
         if dedupe_key in seen:

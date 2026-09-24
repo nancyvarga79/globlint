@@ -24,6 +24,26 @@ CASES = [
     ("duplicate pattern", ["*.log\n", "*.log\n"], ["W005"]),
     ("same text but one negated is not a duplicate", ["*.log\n", "!*.log\n"], []),
     ("multiple issues collected across lines", ["a/ \n", "a[x\n"], ["W001", "E002"]),
+    (
+        "negation nested under an earlier directory exclude can never match",
+        ["build/\n", "!build/keep.txt\n"],
+        ["E003"],
+    ),
+    (
+        "negation re-including the excluded directory itself is fine",
+        ["build/\n", "!build/\n"],
+        [],
+    ),
+    (
+        "negation under an unrelated directory is fine",
+        ["build/\n", "!dist/keep.txt\n"],
+        [],
+    ),
+    (
+        "wildcarded directory pattern is not tracked as a plain exclude",
+        ["build/*/\n", "!build/x/keep.txt\n"],
+        [],
+    ),
 ]
 
 
@@ -36,6 +56,12 @@ class LintLinesTest(unittest.TestCase):
 
     def test_duplicate_finding_points_at_first_occurrence(self):
         findings = lint_lines(["*.log\n", "x\n", "*.log\n"])
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].line, 3)
+        self.assertIn("line 1", findings[0].message)
+
+    def test_unreachable_negation_points_at_excluding_line(self):
+        findings = lint_lines(["build/\n", "src/\n", "!build/keep.txt\n"])
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].line, 3)
         self.assertIn("line 1", findings[0].message)
